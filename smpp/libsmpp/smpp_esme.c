@@ -1035,7 +1035,7 @@ void smpp_esme_shutdown(SMPPServer *smpp_server) {
 }
 
 void smpp_esme_stop_listening(SMPPEsme *smpp_esme) {
-    info(0, "WRITELOCK smpp_esme->event_lock")
+    info(0, "WRITELOCK smpp_esme->event_lock");
     gw_rwlock_wrlock(smpp_esme->event_lock);
     smpp_esme->connected = 0;
     if (smpp_esme->event_container != NULL) {
