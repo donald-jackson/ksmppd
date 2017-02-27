@@ -119,9 +119,12 @@ void smpp_queues_process_ack(SMPPEsme *smpp_esme, long sequence_number, long com
     
     Octstr *key = octstr_format("%ld", sequence_number);
     
+    info(0, "WRITELOCK smpp_esme->ack_process_lock");
     gw_rwlock_wrlock(smpp_esme->ack_process_lock);
     SMPPQueuedPDU *smpp_queued_pdu = dict_remove(smpp_esme->open_acks, key);
+    info(0, "UNLOCK smpp_esme->ack_process_lock");
     gw_rwlock_unlock(smpp_esme->ack_process_lock); /* Shouldn't be readable by the cleanup thread now */
+
     
     if(!smpp_queued_pdu) {
         error(0, "SMPP[%s] Unknown ack %s received, ignoring", octstr_get_cstr(smpp_esme->system_id), octstr_get_cstr(key));

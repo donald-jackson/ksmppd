@@ -153,10 +153,12 @@ void smpp_esme_cleanup(SMPPEsme *smpp_esme) {
 
     smpp_esme_stop_listening(smpp_esme);
 
+    info(0, "WRITELOCK smpp_server->esme_data->cleanup_lock");
     gw_rwlock_wrlock(smpp_esme_data->cleanup_lock);
     debug("smpp.esme.cleanup", 0, "SMPP[%s] Adding %ld to cleanup queue", octstr_get_cstr(smpp_esme->system_id), smpp_esme->id);
     smpp_esme->connected = 0;
     gwlist_append_unique(smpp_esme_data->cleanup_queue, smpp_esme, smpp_esme_compare);
+    info(0, "UNLOCK smpp_server->esme_data->cleanup_lock");
     gw_rwlock_unlock(smpp_esme_data->cleanup_lock);
 }
 
@@ -345,6 +347,7 @@ List *smpp_esme_global_get_queued(SMPPServer *smpp_server) {
     SMPPDatabaseMsg *smpp_database_msg;
 
 
+    info(0, "READLOCK: smpp_server->esme_data->lock");
     gw_rwlock_rdlock(smpp_esme_data->lock);
     
     List *esmes = smpp_esme_global_get_readers(smpp_server, 1);
@@ -397,6 +400,7 @@ List *smpp_esme_global_get_queued(SMPPServer *smpp_server) {
         }
     }
 
+    info(0, "UNLOCK: smpp_server->esme_data->lock");
     gw_rwlock_unlock(smpp_esme_data->lock);
 
     gwlist_destroy(esmes, NULL); /* Don't destroy the ESMEs, these are 'semi-permanent' */
@@ -406,6 +410,7 @@ List *smpp_esme_global_get_queued(SMPPServer *smpp_server) {
 
 void smpp_esme_global_add(SMPPServer *smpp_server, SMPPEsme *smpp_esme) {
     SMPPEsmeData *smpp_esme_data = smpp_server->esme_data;
+    info(0, "WRITELOCK smpp_server->esme_data->lock");
     gw_rwlock_wrlock(smpp_esme_data->lock);
 
     Octstr *key = octstr_duplicate(smpp_esme->system_id);
@@ -424,6 +429,7 @@ void smpp_esme_global_add(SMPPServer *smpp_server, SMPPEsme *smpp_esme) {
     gwlist_produce(smpp_global->binds, smpp_esme);
 
     octstr_destroy(key);
+    info(0, "UNLOCK smpp_server->esme_data->lock");
     gw_rwlock_unlock(smpp_esme_data->lock);
 }
 
@@ -460,6 +466,7 @@ SMPPESMEAuthResult *smpp_esme_auth(SMPPServer *smpp_server, Octstr *system_id, O
     }
     
     if(smpp_auth_result) {   
+        info(0, "WRITELOCK smpp_server->esme_data->lock");
         gw_rwlock_wrlock(smpp_esme_data->lock);
         /* Successful authentication, lets check max binds */
         if(smpp_auth_result->max_binds > 0) {
@@ -479,6 +486,7 @@ SMPPESMEAuthResult *smpp_esme_auth(SMPPServer *smpp_server, Octstr *system_id, O
             }
             octstr_destroy(tmp_system_id);
         }
+        info(0, "UNLOCK smpp_server->esme_data->lock");
         gw_rwlock_unlock(smpp_esme_data->lock);
     }
 
@@ -498,6 +506,7 @@ SMPPEsme *smpp_esme_find_best_receiver(SMPPServer *smpp_server, Octstr *system_i
     Octstr *key = octstr_duplicate(system_id);
     octstr_convert_range(key, 0, octstr_len(key), tolower);
 
+    info(0, "READLOCK: smpp_server->esme_data->lock");
     gw_rwlock_rdlock(smpp_esme_data->lock);
     SMPPEsmeGlobal *smpp_global = dict_get(smpp_esme_data->esmes, key);
     SMPPEsme *best_esme = NULL, *smpp_esme;
@@ -536,23 +545,30 @@ SMPPEsme *smpp_esme_find_best_receiver(SMPPServer *smpp_server, Octstr *system_i
             if (!best_esme) {
                 best_esme = smpp_esme;
             } else {
+                info(0, "READLOCK smpp_esme->ack_process_lock (%s)", octstr_get_cstr(smpp_esme->system_id));
                 gw_rwlock_rdlock(smpp_esme->ack_process_lock);
+                info(0, "READLOCK smpp_esme->ack_process_lock (%s) [best]", octstr_get_cstr(best_esme->system_id));
                 gw_rwlock_rdlock(best_esme->ack_process_lock);
                 if(dict_key_count(smpp_esme->open_acks) < dict_key_count(best_esme->open_acks)) {
+                    info(0, "UNLOCK smpp_esme->ack_process_lock (%s) [best]", octstr_get_cstr(best_esme->system_id));
                     gw_rwlock_unlock(best_esme->ack_process_lock);
                     best_esme = smpp_esme;
                 } else if (counter_value(smpp_esme->outbound_queued) < counter_value(best_esme->outbound_queued)) {
+                    info(0, "UNLOCK smpp_esme->ack_process_lock (%s) [best]", octstr_get_cstr(best_esme->system_id));
                     gw_rwlock_unlock(best_esme->ack_process_lock);
                     best_esme = smpp_esme;
                 } else {
+                    info(0, "UNLOCK smpp_esme->ack_process_lock (%s) [best]", octstr_get_cstr(best_esme->system_id));
                     gw_rwlock_unlock(best_esme->ack_process_lock);
                 }
+                info(0, "UNLOCK smpp_esme->ack_process_lock (%s)", octstr_get_cstr(smpp_esme->system_id));
                 gw_rwlock_unlock(smpp_esme->ack_process_lock);
             }
         }
         gwlist_destroy(options, NULL);
     }
 
+    info(0, "UNLOCK: smpp_server->esme_data->lock");
     gw_rwlock_unlock(smpp_esme_data->lock);
 
     octstr_destroy(key);
@@ -598,6 +614,7 @@ void smpp_esme_cleanup_thread(void *arg) {
             info(0, "New maximum outbound load: %f/sec", max_outbound_load);
         }
         info(0, "Current SMPP load is %f/sec inbound %f/sec outbound", current_inbound_load, current_outbound_load);
+        info(0, "WRITELOCK smpp_server->esme_data->lock");
         gw_rwlock_wrlock(smpp_esme_data->lock);
         keys = dict_keys(smpp_esme_data->esmes);
 
@@ -646,6 +663,7 @@ void smpp_esme_cleanup_thread(void *arg) {
                     ack_num = gwlist_len(ack_keys);
                     for (k = 0; k < ack_num; k++) {
                         ack_key = gwlist_get(ack_keys, k);
+                        info(0, "READLOCK smpp_esme->ack_process_lock (%s)", octstr_get_cstr(smpp_esme->system_id));
                         gw_rwlock_rdlock(smpp_esme->ack_process_lock);
                         queued_ack = dict_get(smpp_esme->open_acks, ack_key);
                         if (queued_ack) { /* Could have been removed by another thread */
@@ -657,6 +675,7 @@ void smpp_esme_cleanup_thread(void *arg) {
                                 queued_ack->callback(queued_ack, SMPP_ESME_COMMAND_STATUS_WAIT_ACK_TIMEOUT);
                             }
                         }
+                        info(0, "UNLOCK smpp_esme->ack_process_lock (%s)", octstr_get_cstr(smpp_esme->system_id));
                         gw_rwlock_unlock(smpp_esme->ack_process_lock);
                     }
                     gwlist_destroy(ack_keys, (void(*)(void *))octstr_destroy);
@@ -684,6 +703,7 @@ void smpp_esme_cleanup_thread(void *arg) {
 
         gwlist_destroy(keys, (void(*)(void *))octstr_destroy);
 
+        info(0, "WRITELOCK smpp_server->esme_data->cleanup_lock");
         gw_rwlock_wrlock(smpp_esme_data->cleanup_lock);
 
         num = gwlist_len(smpp_esme_data->cleanup_queue);
@@ -715,7 +735,10 @@ void smpp_esme_cleanup_thread(void *arg) {
             smpp_esme_data->cleanup_queue = replace;
         }
 
+        info(0, "UNLOCK smpp_server->esme_data->cleanup_lock");
         gw_rwlock_unlock(smpp_esme_data->cleanup_lock);
+
+        info(0, "UNLOCK smpp_eserver->esme_data->lock");
         gw_rwlock_unlock(smpp_esme_data->lock);
 
         gwthread_sleep(SMPP_ESME_CLEANUP_INTERVAL);
@@ -731,6 +754,7 @@ void smpp_esme_send_unbind(SMPPEsme *smpp_esme) {
 SMPPHTTPCommandResult *smpp_esme_unbind_command(SMPPServer *smpp_server, List *cgivars, int content_type) {
     SMPPHTTPCommandResult *smpp_http_command_result = smpp_http_command_result_create();
     SMPPEsmeData *smpp_esme_data = smpp_server->esme_data;
+    info(0, "WRITELOCK smpp_server->esme_data->lock");
     gw_rwlock_wrlock(smpp_esme_data->lock);
     Octstr *system_id = http_cgi_variable(cgivars, "system-id");
     Octstr *bind_id = http_cgi_variable(cgivars, "bind-id");
@@ -792,6 +816,7 @@ SMPPHTTPCommandResult *smpp_esme_unbind_command(SMPPServer *smpp_server, List *c
     
     octstr_destroy(message);
     
+    info(0, "UNLOCK smpp_server->esme_data->lock");
     gw_rwlock_unlock(smpp_esme_data->lock);
     
     return smpp_http_command_result;
@@ -802,7 +827,8 @@ SMPPHTTPCommandResult *smpp_esme_status_command(SMPPServer *smpp_server, List *c
     SMPPEsmeData *smpp_esme_data = smpp_server->esme_data;
     
     smpp_http_command_result->result = octstr_create("");
-    gw_rwlock_rdlock(smpp_esme_data->lock);
+    info(0, "WRITELOCK: smpp_server->esme_data->lock");
+    gw_rwlock_wrlock(smpp_esme_data->lock);
     
     Octstr *key;
     List *keys;
@@ -944,6 +970,7 @@ SMPPHTTPCommandResult *smpp_esme_status_command(SMPPServer *smpp_server, List *c
         octstr_format_append(smpp_http_command_result->result, "</esmes>");
     }
     
+    info(0, "UNLOCK: smpp_server->esme_data->lock");
     gw_rwlock_unlock(smpp_esme_data->lock);
 
     return smpp_http_command_result;
@@ -979,6 +1006,7 @@ void smpp_esme_shutdown(SMPPServer *smpp_server) {
     gwthread_wakeup(smpp_esme_data->cleanup_thread_id);
     gwthread_join(smpp_esme_data->cleanup_thread_id);
     
+    info(0, "WRITELOCK smpp_server->esme_data->lock");
     gw_rwlock_wrlock(smpp_esme_data->lock);
     
     List *keys = dict_keys(smpp_esme_data->esmes);
@@ -992,6 +1020,7 @@ void smpp_esme_shutdown(SMPPServer *smpp_server) {
     }
     gwlist_destroy(keys, NULL);
     
+    info(0, "UNLOCK smpp_server->esme_data->lock");
     gw_rwlock_unlock(smpp_esme_data->lock);
     
     dict_destroy(smpp_esme_data->esmes);
@@ -1006,6 +1035,7 @@ void smpp_esme_shutdown(SMPPServer *smpp_server) {
 }
 
 void smpp_esme_stop_listening(SMPPEsme *smpp_esme) {
+    info(0, "WRITELOCK smpp_esme->event_lock")
     gw_rwlock_wrlock(smpp_esme->event_lock);
     smpp_esme->connected = 0;
     if (smpp_esme->event_container != NULL) {
@@ -1013,6 +1043,7 @@ void smpp_esme_stop_listening(SMPPEsme *smpp_esme) {
         event_free(smpp_esme->event_container);
         smpp_esme->event_container = NULL;
     }
+    info(0, "UNLOCK smpp_esme->event_lock");
     gw_rwlock_unlock(smpp_esme->event_lock);
 }
 
@@ -1026,6 +1057,7 @@ void smpp_esme_disconnect(SMPPEsme *smpp_esme) {
 }
 
 void smpp_esme_destroy_open_acks(SMPPEsme *smpp_esme) {
+    info(0, "WRITELOCK smpp_esme->ack_process_lock");
     gw_rwlock_wrlock(smpp_esme->ack_process_lock);
     List *keys = dict_keys(smpp_esme->open_acks);
     Octstr *key;
@@ -1047,6 +1079,7 @@ void smpp_esme_destroy_open_acks(SMPPEsme *smpp_esme) {
     gwlist_destroy(keys, NULL);
     dict_destroy(smpp_esme->open_acks);
     
+    info(0, "UNLOCK smpp_esme->ack_process_lock");
     gw_rwlock_unlock(smpp_esme->ack_process_lock);
 }
 
