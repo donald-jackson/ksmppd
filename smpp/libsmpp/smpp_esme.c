@@ -348,7 +348,10 @@ List *smpp_esme_global_get_queued(SMPPServer *smpp_server) {
 
 
     info(0, "READLOCK: smpp_server->esme_data->lock 3");
-    gw_rwlock_rdlock(smpp_esme_data->lock);
+    int lock_result = gw_rwlock_timed_rdlock(smpp_esme_data->lock, 30);
+    if(lock_result != 0) {
+        panic(0, "Read lock timed out after 30 seconds, something is wrong");
+    }
     
     List *esmes = smpp_esme_global_get_readers(smpp_server, 1);
     
