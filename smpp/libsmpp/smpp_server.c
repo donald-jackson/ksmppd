@@ -109,6 +109,7 @@ SMPPServer *smpp_server_create() {
 
     smpp_server->default_max_open_acks = SMPP_ESME_DEFAULT_MAX_OPEN_ACKS;
     smpp_server->wait_ack_action = SMPP_WAITACK_DISCONNECT;
+    smpp_server->reverse_addr_users = NULL;
 
     return smpp_server;
 }
@@ -135,6 +136,7 @@ void smpp_server_destroy(SMPPServer *smpp_server) {
     octstr_destroy(smpp_server->auth_url);
     gw_rwlock_destroy(smpp_server->ip_blocklist_lock);
     octstr_destroy(smpp_server->ip_blocklist_exempt_ips);
+    gwlist_destroy(smpp_server->reverse_addr_users, (void(*)(void *))octstr_destroy);
     
     cfg_destroy(smpp_server->running_configuration);
     
@@ -244,6 +246,21 @@ int smpp_server_reconfigure(SMPPServer *smpp_server) {
                 if(smpp_server->database == NULL) {
                     panic(0, "Error configuring database %s configuration %s", octstr_get_cstr(smpp_server->database_type), octstr_get_cstr(smpp_server->database_config));
                 }
+
+
+                tmp_str = cfg_get(grp, octstr_imm("reverse-addr-users"));
+
+                if(octstr_len(tmp_str)) {
+                    smpp_server->reverse_addr_users = octstr_split(tmp_str,octstr_imm(";"));
+                } else {
+                    smpp_server->reverse_addr_users = gwlist_create();
+                }
+
+
+
+
+
+
                 
                 if(cfg_get_integer(&smpp_server->authentication_method, grp, octstr_imm("auth-method")) == -1) {
                     smpp_server->authentication_method = SMPP_SERVER_AUTH_METHOD_DATABASE;

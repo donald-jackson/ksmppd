@@ -299,7 +299,9 @@ Octstr *smpp_pdu_get_system_id_from_dlr_url(Octstr *received_dlr_url) {
     return NULL;
 }
 
-List *smpp_pdu_msg_to_pdu(SMPPEsme *smpp_esme, Msg *msg) {
+
+
+List *smpp_pdu_msg_to_pdu_real(SMPPEsme *smpp_esme, Msg *msg, int reverse) {
     SMPP_PDU *pdu, *pdu2;
     List *pdulist = gwlist_create(), *parts = NULL, *dlr_info;
     int dlrtype, catenate;
@@ -520,14 +522,25 @@ List *smpp_pdu_msg_to_pdu(SMPPEsme *smpp_esme, Msg *msg) {
             pdu2 = smpp_pdu_create(deliver_sm, 0);
             debug("smpp.pdu.msg.to.pdu", 0, "SMPP[%s:%ld] Creating deliver_sm for message: %s sequence number %ld.", octstr_get_cstr(smpp_esme->system_id), smpp_esme->id, octstr_get_cstr(msgid2), pdu2->u.deliver_sm.sequence_number);
             pdu2->u.deliver_sm.esm_class = pdu->u.deliver_sm.esm_class;
-            pdu2->u.deliver_sm.source_addr_ton = pdu->u.deliver_sm.source_addr_ton;
-            pdu2->u.deliver_sm.source_addr_npi = pdu->u.deliver_sm.source_addr_npi;
-            pdu2->u.deliver_sm.dest_addr_ton = pdu->u.deliver_sm.dest_addr_ton;
-            pdu2->u.deliver_sm.dest_addr_npi = pdu->u.deliver_sm.dest_addr_npi;
             pdu2->u.deliver_sm.data_coding = pdu->u.deliver_sm.data_coding;
             pdu2->u.deliver_sm.protocol_id = pdu->u.deliver_sm.protocol_id;
-            pdu2->u.deliver_sm.source_addr = octstr_duplicate(pdu->u.deliver_sm.source_addr);
-            pdu2->u.deliver_sm.destination_addr = octstr_duplicate(pdu->u.deliver_sm.destination_addr);
+
+            if(reverse) {
+                pdu2->u.deliver_sm.source_addr_ton = pdu->u.deliver_sm.dest_addr_ton;
+                pdu2->u.deliver_sm.source_addr_npi = pdu->u.deliver_sm.dest_addr_npi;
+                pdu2->u.deliver_sm.dest_addr_ton = pdu->u.deliver_sm.source_addr_ton;
+                pdu2->u.deliver_sm.dest_addr_npi = pdu->u.deliver_sm.source_addr_npi;
+                pdu2->u.deliver_sm.source_addr = octstr_duplicate(pdu->u.deliver_sm.destination_addr);
+                pdu2->u.deliver_sm.destination_addr = octstr_duplicate(pdu->u.deliver_sm.source_addr);
+            } else {
+                pdu2->u.deliver_sm.source_addr_ton = pdu->u.deliver_sm.source_addr_ton;
+                pdu2->u.deliver_sm.source_addr_npi = pdu->u.deliver_sm.source_addr_npi;
+                pdu2->u.deliver_sm.dest_addr_ton = pdu->u.deliver_sm.dest_addr_ton;
+                pdu2->u.deliver_sm.dest_addr_npi = pdu->u.deliver_sm.dest_addr_npi;
+                pdu2->u.deliver_sm.source_addr = octstr_duplicate(pdu->u.deliver_sm.source_addr);
+                pdu2->u.deliver_sm.destination_addr = octstr_duplicate(pdu->u.deliver_sm.destination_addr);
+            }
+
             pdu2->u.deliver_sm.service_type = octstr_duplicate(pdu->u.deliver_sm.service_type);
             if (smpp_esme->version > 0x33) {
                 pdu2->u.deliver_sm.receipted_message_id = octstr_duplicate(msgid2);
@@ -654,6 +667,10 @@ List *smpp_pdu_msg_to_pdu(SMPPEsme *smpp_esme, Msg *msg) {
     smpp_pdu_destroy(pdu);
 
     return pdulist;
+}
+
+List *smpp_pdu_msg_to_pdu(SMPPEsme *smpp_esme, Msg *msg) {
+    return smpp_pdu_msg_to_pdu_real(smpp_esme, msg, 0);
 }
 
 

@@ -429,6 +429,10 @@ void smpp_bearerbox_inbound_thread(void *arg) {
     SMPPQueuedPDU *smpp_queued_deliver_pdu;
     List *keys;
 
+    long num, i;
+
+    int reversed;
+
 
     while (!(smpp_bearerbox->smpp_bearerbox_state->smpp_server->server_status & SMPP_SERVER_STATUS_SHUTDOWN)) {
         /* If we are here it means we don't have a connection yet or the previous one died */
@@ -545,7 +549,23 @@ void smpp_bearerbox_inbound_thread(void *arg) {
                         smpp_esme = smpp_esme_find_best_receiver(smpp_bearerbox->smpp_bearerbox_state->smpp_server, system_id);
                         
                         if(smpp_esme) {
-                            queued_outbound_pdus = smpp_pdu_msg_to_pdu(smpp_esme, msg);
+                            if(system_id) {
+                                reversed = 0;
+                                num = gwlist_len(smpp_bearerbox->smpp_bearerbox_state->smpp_server->reverse_addr_users);
+                                for(i=0;i<num;i++) {
+                                    if(!reversed && (octstr_case_compare(system_id, gwlist_get(smpp_bearerbox->smpp_bearerbox_state->smpp_server->reverse_addr_users, i)) == 0)) {
+                                        queued_outbound_pdus = smpp_pdu_msg_to_pdu_real(smpp_esme, msg, 1);
+                                        reversed = 1;
+                                        break;
+                                    }
+                                }
+
+                                if(!reversed) {
+                                    queued_outbound_pdus = smpp_pdu_msg_to_pdu(smpp_esme, msg);
+                                }
+                            } else {
+                                queued_outbound_pdus = smpp_pdu_msg_to_pdu(smpp_esme, msg);
+                            }
 
                             if(queued_outbound_pdus != NULL) {
                                 while ((pdu = gwlist_consume(queued_outbound_pdus)) != NULL) {

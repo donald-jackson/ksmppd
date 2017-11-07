@@ -152,6 +152,8 @@ extern "C" {
         long default_max_open_acks;
 
         long wait_ack_action;
+
+        List *reverse_addr_users;
     } SMPPServer;
     
     SMPPServer *smpp_server_create();

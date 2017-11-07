@@ -103,6 +103,8 @@ SINGLE_GROUP(ksmppd,
     OCTSTR(ip-blocklist-exempt-ips)
 
     OCTSTR(wait-ack-action)
+
+    OCTSTR(reverse-addr-users)
 )
         
 SINGLE_GROUP(smpp-routing,	

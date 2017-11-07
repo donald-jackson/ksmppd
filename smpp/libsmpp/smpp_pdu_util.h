@@ -71,6 +71,7 @@ extern "C" {
     Msg *smpp_data_sm_to_msg(SMPPEsme *smpp_esme, SMPP_PDU *pdu, long *reason);
     Octstr *smpp_pdu_get_system_id_from_dlr_url(Octstr *received_dlr_url);
     List *smpp_pdu_msg_to_pdu(SMPPEsme *smpp_esme, Msg *msg);
+    List *smpp_pdu_msg_to_pdu_real(SMPPEsme *smpp_esme, Msg *msg, int reverse);
 
 
 #ifdef __cplusplus
